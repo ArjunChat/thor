@@ -1,0 +1,14 @@
+{
+  "preset": "thor-30m",
+  "data_dir": "../data/tinystories",
+  "out_dir": "../runs/thor-30m-tinystories",
+  "batch_size": 32,
+  "grad_accum": 4,
+  "max_steps": 5000,
+  "lr": 1e-3,
+  "min_lr": 1e-4,
+  "warmup_steps": 300,
+  "eval_interval": 250,
+  "ckpt_interval": 250,
+  "keep_every": 1000
+}

@@ -1,0 +1,25 @@
+name: models
+
+on:
+  push:
+    paths: ["models/**", ".github/workflows/models-ci.yml"]
+  pull_request:
+    paths: ["models/**", ".github/workflows/models-ci.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: models
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (CPU-only PyTorch)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+      - name: Test
+        run: pytest -q

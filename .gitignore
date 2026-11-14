@@ -1,0 +1,20 @@
+# Data, runs and weights never go in git
+data/
+runs/
+*.pt
+*.bin
+*.log
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+# Secrets
+.env
+.env.*
+!.env.example
