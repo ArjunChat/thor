@@ -45,3 +45,9 @@ python -m thor.specs
 ```
 
 Full instructions: [`models/README.md`](models/README.md).
+
+## License
+
+The code and documentation in this repository are licensed under the [Apache License 2.0](LICENSE).
+
+The license does not grant rights to the THOR name, wordmark or symbol (Apache-2.0, section 6). Trained model weights are released under terms stated on each model card at release time.

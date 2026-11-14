@@ -29,4 +29,4 @@ State plainly what the model cannot do. Small models produce fluent but often in
 
 ## License
 
-To be decided before release.
+State the license for the weights explicitly at release. The training code is Apache-2.0 (see the repository LICENSE), but that does not automatically cover weights.
