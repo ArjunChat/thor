@@ -44,8 +44,9 @@ def test_special_tokens(tok):
     assert tok.decode(ids) == f"hello{EOT}world"
     # encode_ordinary treats the special string as plain text
     assert tok.eot_id not in tok.encode_ordinary(f"hello{EOT}world")
-    assert tok.vocab_size == 256 + len(tok.merges) + 1
-    assert tok.eot_id == tok.vocab_size - 1
+    # bytes, then merges, then <|endoftext|> and the four chat tokens
+    assert tok.vocab_size == 256 + len(tok.merges) + 5
+    assert tok.eot_id == 256 + len(tok.merges)
 
 
 def test_training_is_deterministic():
@@ -84,7 +85,7 @@ def test_matches_naive_reference():
                     i += 1
             out.append(r)
         words = out
-    fast = Tokenizer.train([" ".join(CORPUS)], vocab_size=256 + 60 + 1)
+    fast = Tokenizer.train([" ".join(CORPUS)], vocab_size=256 + 60 + 5)
     assert fast.merges == merges
 
 

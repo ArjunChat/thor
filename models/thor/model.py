@@ -9,6 +9,7 @@ feed-forward, no biases, and input/output embeddings tied by default.
 from __future__ import annotations
 
 import math
+from collections.abc import Collection
 
 import torch
 import torch.nn as nn
@@ -166,10 +167,15 @@ class ThorModel(nn.Module):
         max_new_tokens: int,
         temperature: float = 1.0,
         top_k: int | None = None,
-        eos_id: int | None = None,
+        eos_id: int | Collection[int] | None = None,
         generator: torch.Generator | None = None,
     ) -> torch.Tensor:
-        """Autoregressive sampling. temperature == 0 means greedy decoding."""
+        """Autoregressive sampling. temperature == 0 means greedy decoding.
+
+        Stops early once every sequence has produced a stop token (eos_id: one id or several).
+        """
+        stop_ids = [eos_id] if isinstance(eos_id, int) else list(eos_id or ())
+        stop = torch.tensor(stop_ids, device=idx.device, dtype=torch.long) if stop_ids else None
         for _ in range(max_new_tokens):
             context = idx[:, -self.cfg.max_seq_len :]
             logits, _ = self(context)
@@ -185,6 +191,6 @@ class ThorModel(nn.Module):
                 probs = F.softmax(logits, dim=-1)
                 next_id = torch.multinomial(probs, num_samples=1, generator=generator)
             idx = torch.cat((idx, next_id), dim=1)
-            if eos_id is not None and bool((next_id == eos_id).all()):
+            if stop is not None and bool(torch.isin(next_id, stop).all()):
                 break
         return idx

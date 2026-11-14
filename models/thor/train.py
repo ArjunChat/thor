@@ -27,6 +27,7 @@ import torch
 
 from .config import ModelConfig, get_preset
 from .data import TokenDataset, load_meta
+from .sft_data import SFTDataset
 from .model import ThorModel
 from .tokenizer import Tokenizer
 
@@ -36,6 +37,9 @@ CHECKPOINT_FORMAT = 1
 @dataclass
 class TrainConfig:
     preset: str = "thor-30m"
+    # Start from this checkpoint's weights and shape (preset is then ignored). Required for
+    # instruction tuning on data prepared by thor.sft_data.
+    init_from: str = ""
     data_dir: str = "data/prepared"
     out_dir: str = "runs/thor-30m"
     # optimization
@@ -171,8 +175,19 @@ def train(cfg: TrainConfig) -> dict[str, Any]:
     if tokenizer.fingerprint() != meta["tokenizer_sha256"]:
         raise SystemExit("tokenizer.json does not match the tokenizer recorded in meta.json")
 
-    model_cfg = dataclasses.replace(get_preset(cfg.preset).with_vocab_size(meta["vocab_size"]),
-                                    dropout=cfg.dropout)
+    stage = "sft" if meta.get("kind") == "sft" else "pretrain"
+    base = None
+    if cfg.init_from:
+        base = load_checkpoint(cfg.init_from, map_location="cpu")
+        if base["tokenizer_sha256"] != tokenizer.fingerprint():
+            raise SystemExit("--init-from checkpoint was trained with a different tokenizer than this data")
+        model_cfg = dataclasses.replace(ModelConfig.from_dict(base["model_config"]), dropout=cfg.dropout)
+        print(f"Initializing from {cfg.init_from} (step {base.get('step')}); preset is ignored")
+    elif stage == "sft":
+        raise SystemExit("Instruction tuning starts from a pretrained model: pass --init-from <checkpoint>")
+    else:
+        model_cfg = dataclasses.replace(get_preset(cfg.preset).with_vocab_size(meta["vocab_size"]),
+                                        dropout=cfg.dropout)
     seq_len = cfg.seq_len or model_cfg.max_seq_len
     if seq_len > model_cfg.max_seq_len:
         raise SystemExit(f"seq_len {seq_len} > model max_seq_len {model_cfg.max_seq_len}")
@@ -184,11 +199,17 @@ def train(cfg: TrainConfig) -> dict[str, Any]:
     torch.manual_seed(cfg.seed)
     sampler = torch.Generator().manual_seed(cfg.seed)
 
-    datasets = {
-        "train": TokenDataset(Path(cfg.data_dir) / "train.bin", seq_len),
-        "val": TokenDataset(Path(cfg.data_dir) / "val.bin", seq_len),
-    }
+    if stage == "sft":
+        datasets = {split: SFTDataset(cfg.data_dir, split, seq_len) for split in ("train", "val")}
+    else:
+        datasets = {
+            "train": TokenDataset(Path(cfg.data_dir) / "train.bin", seq_len),
+            "val": TokenDataset(Path(cfg.data_dir) / "val.bin", seq_len),
+        }
     model = ThorModel(model_cfg).to(device)
+    if base is not None and not last_path.exists():
+        model.load_state_dict(base["model"])
+    del base
     optimizer = model.configure_optimizer(cfg.lr, cfg.weight_decay, (cfg.beta1, cfg.beta2), device.type)
     scaler = torch.amp.GradScaler(device.type, enabled=dtype == torch.float16)
 
@@ -216,14 +237,18 @@ def train(cfg: TrainConfig) -> dict[str, Any]:
     run_model = torch.compile(model) if cfg.compile else model
     n_params = model.num_params()
     tokens_per_step = cfg.batch_size * cfg.grad_accum * seq_len
-    print(f"Model {model_cfg.name}: {n_params:,} parameters | device {device} | dtype {dtype}")
-    print(f"Tokens/step {tokens_per_step:,} | train tokens {len(datasets['train']):,}")
+    print(f"Model {model_cfg.name} ({stage}): {n_params:,} parameters | device {device} | dtype {dtype}")
+    if stage == "sft":
+        print(f"Up to {tokens_per_step:,} positions/step | train conversations {len(datasets['train']):,}")
+    else:
+        print(f"Tokens/step {tokens_per_step:,} | train tokens {len(datasets['train']):,}")
     (out_dir / "config.json").write_text(json.dumps(
         {"train": dataclasses.asdict(cfg), "model": model_cfg.to_dict(), "params": n_params}, indent=2))
 
     def save(path: Path, extra: dict | None = None) -> None:
         atomic_save({
             "format": CHECKPOINT_FORMAT,
+            "stage": stage,
             "model_config": model_cfg.to_dict(),
             "train_config": dataclasses.asdict(cfg),
             "model": model.state_dict(),
@@ -295,7 +320,7 @@ def train(cfg: TrainConfig) -> dict[str, Any]:
                 log.flush()
                 if losses["val"] < best_val:
                     best_val = losses["val"]
-                    atomic_save({"format": CHECKPOINT_FORMAT, "model_config": model_cfg.to_dict(),
+                    atomic_save({"format": CHECKPOINT_FORMAT, "stage": stage, "model_config": model_cfg.to_dict(),
                                  "model": model.state_dict(), "step": step, "val_loss": best_val,
                                  "tokenizer_sha256": tokenizer.fingerprint()}, out_dir / "model_best.pt")
 

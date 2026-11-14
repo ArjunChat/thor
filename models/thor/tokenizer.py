@@ -7,7 +7,7 @@ exactly because the base vocabulary is all 256 byte values.
 
 Token ids:   0..255              raw bytes
              256..256+M-1        merges, in the order they were learned
-             256+M..             special tokens (e.g. <|endoftext|>)
+             256+M..             special tokens (<|endoftext|> and the chat tokens)
 
 Design notes and limitations: docs/decisions/0002-tokenizer.md.
 """
@@ -26,6 +26,9 @@ from pathlib import Path
 # Every character falls into exactly one class, so chunks concatenate back to the input.
 SPLIT_PATTERN = r"""'(?:[sdmt]|ll|ve|re)| ?[^\W\d_]+| ?\d{1,3}| ?(?:[^\s\w]|_)+|\s+(?!\S)|\s+"""
 EOT = "<|endoftext|>"
+# Chat-format tokens (see thor/chat_format.py). Included in every new tokenizer by default.
+SYSTEM, USER, ASSISTANT, END = "<|system|>", "<|user|>", "<|assistant|>", "<|end|>"
+DEFAULT_SPECIAL_TOKENS = (EOT, SYSTEM, USER, ASSISTANT, END)
 FORMAT_VERSION = 1
 _CACHE_LIMIT = 100_000
 
@@ -48,7 +51,7 @@ class Tokenizer:
     def __init__(
         self,
         merges: list[tuple[int, int]],
-        special_tokens: Iterable[str] = (EOT,),
+        special_tokens: Iterable[str] = DEFAULT_SPECIAL_TOKENS,
         pattern: str = SPLIT_PATTERN,
     ) -> None:
         self.pattern = pattern
@@ -79,7 +82,7 @@ class Tokenizer:
         cls,
         texts: Iterable[str],
         vocab_size: int,
-        special_tokens: Iterable[str] = (EOT,),
+        special_tokens: Iterable[str] = DEFAULT_SPECIAL_TOKENS,
         min_frequency: int = 2,
         verbose: bool = False,
     ) -> "Tokenizer":

@@ -11,6 +11,9 @@ THOR's language-model stack, written from scratch in PyTorch:
 | `thor/train.py` | Training loop with checkpointing, exact resume, and safe interruption |
 | `thor/evaluate.py` | Deterministic held-out loss, perplexity and bits per byte |
 | `thor/sample.py` | Text generation from a checkpoint |
+| `thor/chat_format.py` | Chat format: role tokens and the assistant-only loss mask |
+| `thor/sft_data.py` | Conversations (JSONL) → instruction-tuning data |
+| `thor/chat.py` | Terminal chat with a checkpoint |
 | `thor/specs.py` | Prints the preset specification table and compute estimates |
 | `notebooks/train_thor_30m_colab.ipynb` | End-to-end THOR-30M training on a free Colab GPU |
 
@@ -99,9 +102,26 @@ python -m thor.sample   --ckpt ../runs/thor-30m-tinystories/model_best.pt \
 
 Bits per byte can be compared across tokenizers; loss and perplexity can only be compared between models that share a tokenizer.
 
+### 5. Instruction tuning and chat
+
+A base model only continues text. To make it chat, fine-tune it on conversations ([decision record](../docs/decisions/0004-chat-format-and-instruction-tuning.md)):
+
+```bash
+# conversations.jsonl: one {"messages": [{"role": "user", "content": "…"}, {"role": "assistant", "content": "…"}]} per line
+python -m thor.sft_data --input conversations.jsonl --tokenizer ../data/tinystories/tokenizer.json --out ../data/chat-sft
+python -m thor.train --init-from ../runs/thor-30m-tinystories/model_best.pt --data-dir ../data/chat-sft \
+  --out-dir ../runs/thor-30m-chat --lr 1e-4 --min-lr 1e-5 --max-steps 2000 --warmup-steps 100
+python -m thor.chat --ckpt ../runs/thor-30m-chat/model_best.pt --tokenizer ../data/chat-sft/tokenizer.json
+```
+
+- Use the base model's tokenizer. Tokenizers include the chat tokens by default.
+- Only assistant replies are trained on. Resume, interruption and checkpointing work as in pretraining.
+- `thor.chat` keeps the conversation history (`/reset` clears it) and warns if the checkpoint is a base model.
+- The learning rates above are untuned starting points. **Choose and register a conversation dataset in [`DATA.md`](DATA.md) first.**
+
 ## Known limitations
 
 - The tokenizer is pure Python. It is fine for corpora up to a few GB with `--workers`, but slow at multi-billion-token scale. A compiled encoder is a planned follow-up.
 - No KV cache yet, so generation recomputes the full context each token. That is acceptable for these model sizes.
 - Single-GPU training only (no distributed data parallel yet).
-- No instruction tuning yet (THOR-Instruct is planned).
+- Instruction tuning is single-turn-loss SFT only (no preference tuning yet). Chat quality depends entirely on the trained base model and the conversation data.

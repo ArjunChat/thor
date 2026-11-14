@@ -78,10 +78,13 @@ export const models: Model[] = [
   {
     slug: "thor-instruct",
     name: "THOR-Instruct",
-    status: "planned",
+    status: "in-development",
     role: "Instruction-tuned model family",
     summary: "Instruction-tuned versions of trained THOR base models, intended to power THOR Chat.",
-    training: ["Requires a trained base model first. Not started."],
+    training: [
+      "Chat format and instruction-tuning pipeline built and tested; no model tuned yet.",
+      "Needs a trained base model (THOR-30M first) and a chosen conversation dataset.",
+    ],
     evaluation: "No results yet.",
   },
   {

@@ -59,6 +59,6 @@ export const pipeline: PipelineStage[] = [
   { name: "Architecture", status: "working", detail: "Decoder-only Transformer with RoPE, SwiGLU and RMSNorm, in three sizes." },
   { name: "Training", status: "working", detail: "Atomic checkpoints and bit-exact resume after any interruption." },
   { name: "Evaluation", status: "working", detail: "Deterministic held-out loss, perplexity and bits per byte." },
-  { name: "Instruction tuning", status: "planned", detail: "Supervised fine-tuning for THOR-Instruct." },
+  { name: "Instruction tuning", status: "working", detail: "Chat format and fine-tuning that learns only from assistant replies." },
   { name: "Inference service", status: "planned", detail: "An independent serving layer for THOR Chat and the API." },
 ];

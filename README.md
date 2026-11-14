@@ -23,7 +23,7 @@ Status values are deliberately strict: **Planned → In development → Training
 | THOR-30M | 31.1M parameters, 14 layers, d=384, 1,024-token context | In development (pipeline ready, not trained) |
 | THOR-100M | 97.5M parameters, 12 layers, d=768, 1,024-token context | In development (pipeline ready, not trained) |
 | THOR-150M | 151.2M parameters, 14 layers, d=896, 1,024-token context | Planned |
-| THOR-Instruct | Instruction-tuned family | Planned |
+| THOR-Instruct | Instruction-tuned family | In development (chat pipeline ready, no model tuned) |
 | THOR-Embed | Embedding model | Planned |
 
 Parameter counts are specifications (the size of the network), not claims about capability. Models of this size produce fluent but shallow text and are not comparable to frontier commercial LLMs.

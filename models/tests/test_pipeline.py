@@ -119,3 +119,11 @@ def test_rerunning_a_finished_run_is_a_noop(data_dir, tmp_path):
     assert again["step"] == first["step"] == 3
     assert again["loss"] is None
     json.dumps(again, allow_nan=False)  # valid JSON
+
+
+def test_prepare_rejects_an_empty_split(tmp_path):
+    raw = tmp_path / "same.txt"
+    raw.write_text("<|endoftext|>".join(["the same document"] * 20), encoding="utf-8")
+    with pytest.raises(SystemExit, match="split is empty"):
+        prepare.main(["--input", str(raw), "--out", str(tmp_path / "out"), "--vocab-size", "300",
+                      "--doc-sep", "<|endoftext|>", "--workers", "1"])

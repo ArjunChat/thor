@@ -137,6 +137,13 @@ def main(argv: list[str] | None = None) -> None:
         for f in files.values():
             f.close()
 
+    for split, n in docs.items():
+        if n == 0:
+            raise SystemExit(
+                f"The {split} split is empty ({docs['train']} train / {docs['val']} val documents). "
+                "The split is by document content, so add more distinct documents or adjust --val-fraction."
+            )
+
     meta = {
         "vocab_size": tok.vocab_size,
         "eot_id": tok.eot_id,
