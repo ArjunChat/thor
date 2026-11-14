@@ -29,8 +29,8 @@ npm run check      # lint + typecheck + tests + production build
 
 When something actually happens (for example, THOR-30M finishes training), update `src/content/models.ts` and `research.ts` with the measured numbers, bump `site.statusUpdated`, and run `npm run check`.
 
-Set `site.repo.public` to `true` in `src/content/site.ts` if the repository becomes public; source links appear only then. Set `NEXT_PUBLIC_SITE_URL` at deploy time for correct canonical URLs and the sitemap.
+Set `site.repo.public` to `true` in `src/content/site.ts` if the repository becomes public; source links appear only then. The canonical URL comes from `NEXT_PUBLIC_SITE_URL` if set, otherwise Vercel's production domain (`VERCEL_PROJECT_PRODUCTION_URL`), otherwise https://thor-alpha-three.vercel.app.
 
 ## Deploying (Vercel)
 
-The repo-root `vercel.json` defines a single Vercel service, `web` (root `web/`, Next.js), which serves all public traffic. Import `ArjunChat/thor` in Vercel and leave the project's Root Directory at the repository root; `vercel.json` points the service at `web/`. `models/` is not deployed: it is an offline training toolkit, not a web service.
+The repo-root `vercel.json` defines a single Vercel service, `web` (root `web/`, Next.js), which serves all public traffic. Live at https://thor-alpha-three.vercel.app. Import `ArjunChat/thor` in Vercel and leave the project's Root Directory at the repository root; `vercel.json` points the service at `web/`. `models/` is not deployed: it is an offline training toolkit, not a web service.

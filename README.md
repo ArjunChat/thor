@@ -12,7 +12,7 @@ This repository is THOR's monorepo.
 | [`docs/decisions/`](docs/decisions/) | Architecture decision records | Active |
 | [`docs/model-cards/`](docs/model-cards/) | Model card template; a card is published per model only once it is trained | Template only |
 | [`brand/`](brand/) | Brand guidelines, wordmark, symbol, design tokens | Version 1 |
-| [`web/`](web/) | Company website (Next.js, fully static) | Built, not deployed |
+| [`web/`](web/) | Company website (Next.js, fully static) | Live at https://thor-alpha-three.vercel.app |
 
 ## Model program status
 

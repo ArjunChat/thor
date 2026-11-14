@@ -3,7 +3,16 @@ export const site = {
   tagline: "Intelligence, engineered.",
   description:
     "THOR is an independent AI company engineering its own language models, from the tokenizer to the trained weights, and building accessible AI products on top of them.",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  /**
+   * Canonical origin for metadata, the sitemap and social images. An explicit
+   * NEXT_PUBLIC_SITE_URL wins; on Vercel, the project's production domain is
+   * provided at build time (and follows a custom domain once one is added).
+   */
+  url:
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : "https://thor-alpha-three.vercel.app"),
   /** Date of the last factual status update shown on the site. */
   statusUpdated: "2026-11-14",
   repo: {
