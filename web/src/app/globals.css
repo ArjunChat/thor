@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+@theme inline {
+  --color-black: var(--thor-black);
+  --color-graphite-900: var(--thor-graphite-900);
+  --color-graphite-800: var(--thor-graphite-800);
+  --color-graphite-700: var(--thor-graphite-700);
+  --color-graphite-600: var(--thor-graphite-600);
+  --color-steel: var(--thor-steel);
+  --color-silver: var(--thor-silver);
+  --color-white: var(--thor-white);
+  --color-signal: var(--thor-signal);
+  --color-signal-soft: var(--thor-signal-soft);
+  --font-sans: var(--font-instrument), var(--thor-font-sans);
+  --font-mono: var(--font-jetbrains), var(--thor-font-mono);
+  --radius-sm: var(--thor-radius-sm);
+  --radius-md: var(--thor-radius-md);
+  --radius-lg: var(--thor-radius-lg);
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--thor-black);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--thor-black);
+    color: var(--thor-white);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--thor-signal);
+    color: var(--thor-white);
+  }
+  :focus-visible {
+    outline: 2px solid var(--thor-signal);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  .label {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1rem;
+    letter-spacing: var(--thor-tracking-label);
+    text-transform: uppercase;
+    color: var(--thor-steel);
+  }
+  .display {
+    font-weight: 600;
+    letter-spacing: var(--thor-tracking-display);
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+  .lede {
+    color: var(--thor-silver);
+    font-size: 1.125rem;
+    line-height: 1.65;
+    text-wrap: pretty;
+  }
+  .hairline {
+    border-color: var(--thor-graphite-600);
+  }
+  .container-thor {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 76rem;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .container-thor {
+      padding-inline: 2rem;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

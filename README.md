@@ -11,8 +11,8 @@ This repository is THOR's monorepo.
 | [`models/`](models/) | THOR Models: tokenizer, Transformer, training, evaluation, sampling | **Working code, tested.** No THOR model has been trained yet. |
 | [`docs/decisions/`](docs/decisions/) | Architecture decision records | Active |
 | [`docs/model-cards/`](docs/model-cards/) | Model card template; a card is published per model only once it is trained | Template only |
-| `brand/` | Brand guidelines, wordmark, design tokens | Planned |
-| `web/` | Company website | Planned |
+| [`brand/`](brand/) | Brand guidelines, wordmark, symbol, design tokens | Version 1 |
+| [`web/`](web/) | Company website (Next.js, fully static) | Built, not deployed |
 
 ## Model program status
 

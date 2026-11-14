@@ -1,0 +1,32 @@
+/*
+ * THOR design tokens: the single source of truth for color, type and shape.
+ * web/src/styles/tokens.css must stay byte-identical (enforced by web tests).
+ */
+:root {
+  /* Neutrals */
+  --thor-black: #0a0a0b;
+  --thor-graphite-900: #141518;
+  --thor-graphite-800: #1c1d21;
+  --thor-graphite-700: #24262b;
+  --thor-graphite-600: #2e3036;
+  --thor-steel: #7c808a;
+  --thor-silver: #a9adb6;
+  --thor-white: #f5f6f7;
+
+  /* Accent: used sparingly (logo unit, focus, live states, one CTA per view) */
+  --thor-signal: #3d7bff;
+  --thor-signal-ink: #2a63ea; /* accent on light backgrounds (4.8:1 on white) */
+  --thor-signal-soft: rgb(61 123 255 / 0.14);
+
+  /* Type */
+  --thor-font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --thor-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --thor-tracking-display: -0.035em;
+  --thor-tracking-label: 0.08em;
+
+  /* Shape (derived from the symbol's rounded square) */
+  --thor-radius-sm: 6px;
+  --thor-radius-md: 10px;
+  --thor-radius-lg: 16px;
+  --thor-hairline: 1px solid var(--thor-graphite-600);
+}
