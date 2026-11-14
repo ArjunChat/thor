@@ -101,3 +101,21 @@ def test_cli_parsing(tmp_path):
     conf.write_text(json.dumps({"preset": "thor-100m", "lr": 0.001}))
     c = parse_args(["--config", str(conf), "--lr", "0.002", "--compile", "true", "--max-steps", "5"])
     assert (c.preset, c.lr, c.compile, c.max_steps) == ("thor-100m", 0.002, True, 5)
+
+
+def test_iter_documents_streams_across_block_boundaries(tmp_path):
+    sep = "<|endoftext|>"
+    docs = [f"document {i} " + "x" * (i * 7 % 23) for i in range(50)]
+    path = tmp_path / "docs.txt"
+    path.write_text(("\n" + sep + "\n").join(docs) + "\n" + sep + "\n\n", encoding="utf-8")
+    for block in (3, 7, 13, 1 << 20):  # tiny blocks split the separator itself
+        assert list(prepare.iter_documents([path], sep, block_chars=block)) == [d.strip() for d in docs]
+    assert list(prepare.iter_documents([path], None)) == [path.read_text().strip()]
+
+
+def test_rerunning_a_finished_run_is_a_noop(data_dir, tmp_path):
+    first = train(cfg(data_dir, tmp_path / "run", max_steps=3))
+    again = train(cfg(data_dir, tmp_path / "run", max_steps=3))
+    assert again["step"] == first["step"] == 3
+    assert again["loss"] is None
+    json.dumps(again, allow_nan=False)  # valid JSON

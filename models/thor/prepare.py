@@ -26,14 +26,29 @@ from .data import MAX_VOCAB, TOKEN_DTYPE
 from .tokenizer import Tokenizer
 
 
-def iter_documents(paths: list[Path], doc_sep: str | None) -> Iterator[str]:
+def iter_documents(paths: list[Path], doc_sep: str | None, block_chars: int = 1 << 24) -> Iterator[str]:
+    """Yield stripped, non-empty documents, streaming so multi-GB files never sit in memory whole."""
     for path in paths:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        docs = text.split(doc_sep) if doc_sep else [text]
-        for doc in docs:
-            doc = doc.strip()
-            if doc:
-                yield doc
+        with open(path, encoding="utf-8", errors="replace", newline="") as f:
+            if not doc_sep:
+                doc = f.read().strip()
+                if doc:
+                    yield doc
+                continue
+            buffer = ""
+            while True:
+                block = f.read(block_chars)
+                if not block:
+                    break
+                buffer += block
+                *docs, buffer = buffer.split(doc_sep)
+                for doc in docs:
+                    doc = doc.strip()
+                    if doc:
+                        yield doc
+            buffer = buffer.strip()
+            if buffer:
+                yield buffer
 
 
 def is_val(doc: str, val_fraction: float) -> bool:

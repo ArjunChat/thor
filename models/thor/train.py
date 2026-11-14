@@ -88,9 +88,13 @@ def resolve_device(name: str) -> torch.device:
 
 def resolve_dtype(name: str, device: torch.device) -> torch.dtype:
     if name == "auto":
-        if device.type == "cuda" and torch.cuda.is_bf16_supported():
+        if device.type != "cuda":
+            return torch.float32
+        # Native bf16 needs Ampere (compute capability 8.0) or newer. Older GPUs such as
+        # the T4 can only emulate it slowly, so they use fp16 with gradient scaling.
+        if torch.cuda.get_device_capability(device)[0] >= 8:
             return torch.bfloat16
-        return torch.float32
+        return torch.float16
     return {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[name]
 
 
@@ -247,6 +251,8 @@ def train(cfg: TrainConfig) -> dict[str, Any]:
         model.train()
         t0 = time.time()
         session_end = step + cfg.session_steps if cfg.session_steps else cfg.max_steps
+        if step >= cfg.max_steps:
+            print(f"Run already complete at step {step} (max_steps {cfg.max_steps}); nothing to do.")
         while step < min(cfg.max_steps, session_end):
             lr = lr_at(step, cfg)
             for group in optimizer.param_groups:
@@ -307,7 +313,8 @@ def train(cfg: TrainConfig) -> dict[str, Any]:
         log.close()
         for s, h in previous_handlers.items():
             signal.signal(s, h)
-    return {"step": step, "loss": last_loss, "best_val_loss": best_val, "params": n_params}
+    return {"step": step, "loss": last_loss if math.isfinite(last_loss) else None,
+            "best_val_loss": best_val if math.isfinite(best_val) else None, "params": n_params}
 
 
 def _parse_bool(value: str) -> bool:

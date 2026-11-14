@@ -12,6 +12,7 @@ THOR's language-model stack, written from scratch in PyTorch:
 | `thor/evaluate.py` | Deterministic held-out loss, perplexity and bits per byte |
 | `thor/sample.py` | Text generation from a checkpoint |
 | `thor/specs.py` | Prints the preset specification table and compute estimates |
+| `notebooks/train_thor_30m_colab.ipynb` | End-to-end THOR-30M training on a free Colab GPU |
 
 Design rationale: [`docs/decisions/`](../docs/decisions/).
 
@@ -41,6 +42,17 @@ These are **estimates from arithmetic, not measurements.** They assume 20 traini
 CPU training is only practical for `thor-nano` (≈10k tokens/s measured on a 4-core cloud CPU).
 
 ## Usage
+
+### Train THOR-30M on Google Colab (free T4 GPU)
+
+Open [`notebooks/train_thor_30m_colab.ipynb`](notebooks/train_thor_30m_colab.ipynb) in Colab (*File → Open notebook → GitHub*, or [this link](https://colab.research.google.com/github/ArjunChat/thor/blob/main/models/notebooks/train_thor_30m_colab.ipynb) if the repo is public), choose a T4 GPU runtime, and *Run all*. The notebook:
+
+1. clones this repo (for a private repo, add a `GITHUB_TOKEN` Colab secret),
+2. downloads TinyStories, trains the THOR tokenizer and tokenizes the data once, saving the result to Google Drive,
+3. trains with checkpoints on Drive. After a disconnect, *Run all* again and it resumes,
+4. plots loss, evaluates the best checkpoint, and generates samples.
+
+CI runs the whole notebook on CPU with a tiny model (`THOR_SMOKE_TEST=1`), so it stays in sync with the code. The real T4 run has not been tested yet.
 
 ### 1. Install
 
