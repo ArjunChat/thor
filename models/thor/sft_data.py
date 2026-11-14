@@ -4,7 +4,11 @@ Prepare from JSONL, one conversation per line:
     {"messages": [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": "Hello!"}]}
 
     python -m thor.sft_data --input chats.jsonl --tokenizer data/tinystories/tokenizer.json \\
-        --out data/chat-sft --max-len 1024
+        --out data/chat-sft --max-len 1024 --license Apache-2.0
+
+--license is required and must be on the curation allowlist (see thor/curate.py).
+Personal data in every message is replaced with fictitious surrogates (thor/pii.py)
+unless --no-scrub-pii is given.
 
 Use the *same tokenizer as the base model* you will fine-tune. Writes:
     {train,val}_tokens.bin   uint16 token ids, conversations back to back
@@ -17,13 +21,16 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 import shutil
 from pathlib import Path
 
 import numpy as np
 import torch
 
+from . import pii
 from .chat_format import render, require_chat
+from .curate import DEFAULT_ALLOWED_LICENSES, OBLIGATIONS
 from .data import TOKEN_DTYPE
 from .prepare import is_val
 from .tokenizer import Tokenizer
@@ -81,7 +88,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--max-len", type=int, default=1024, help="Conversations are truncated to this many tokens")
     ap.add_argument("--val-fraction", type=float, default=0.02)
     ap.add_argument("--overwrite", action="store_true")
+    ap.add_argument("--license", required=True, help="License of the input data (SPDX id, or THOR-owned)")
+    ap.add_argument("--allow-license", action="append", default=[],
+                    help="Add a license to the allowlist (only after checking its terms)")
+    ap.add_argument("--no-scrub-pii", action="store_true", help="Keep personal data as is (not recommended)")
     args = ap.parse_args(argv)
+    if args.license not in DEFAULT_ALLOWED_LICENSES | set(args.allow_license):
+        raise SystemExit(f"License {args.license!r} is not on the allowlist; check the dataset's terms first")
 
     out = Path(args.out)
     if (out / "meta.json").exists() and not args.overwrite:
@@ -93,6 +106,7 @@ def main(argv: list[str] | None = None) -> None:
 
     files = {s: (open(out / f"{s}_tokens.bin", "wb"), open(out / f"{s}_mask.bin", "wb")) for s in ("train", "val")}
     offsets = {"train": [0], "val": [0]}
+    pii_counts: Counter[str] = Counter()
     stats = {"conversations": 0, "skipped_invalid": 0, "skipped_no_reply": 0, "truncated": 0,
              "train_tokens": 0, "val_tokens": 0, "train_reply_tokens": 0, "val_reply_tokens": 0}
     try:
@@ -103,6 +117,13 @@ def main(argv: list[str] | None = None) -> None:
                         continue
                     try:
                         messages = json.loads(line)["messages"]
+                        if not args.no_scrub_pii:
+                            scrubbed = []
+                            for m in messages:
+                                content, found = pii.scrub(m["content"]) if isinstance(m.get("content"), str) else (m.get("content"), {})
+                                pii_counts.update(found)
+                                scrubbed.append({**m, "content": content})
+                            messages = scrubbed
                         ids, mask = render(tok, messages, add_eot=True)
                     except (ValueError, KeyError, TypeError) as e:
                         stats["skipped_invalid"] += 1
@@ -137,6 +158,10 @@ def main(argv: list[str] | None = None) -> None:
         "dtype": np.dtype(TOKEN_DTYPE).name,
         "tokenizer_sha256": tok.fingerprint(),
         "max_len": args.max_len,
+        "license": args.license,
+        "license_obligations": OBLIGATIONS.get(args.license, "none recorded"),
+        "pii_scrubbed": not args.no_scrub_pii,
+        "pii_replaced": dict(pii_counts),
         "train_conversations": len(offsets["train"]) - 1,
         "val_conversations": len(offsets["val"]) - 1,
         **stats,

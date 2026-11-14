@@ -13,7 +13,13 @@ THOR's language-model stack, written from scratch in PyTorch:
 | `thor/sample.py` | Text generation from a checkpoint |
 | `thor/chat_format.py` | Chat format: role tokens and the assistant-only loss mask |
 | `thor/sft_data.py` | Conversations (JSONL) → instruction-tuning data |
-| `thor/chat.py` | Terminal chat with a checkpoint |
+| `thor/chat.py` | Terminal chat with a checkpoint (safety layer on by default) |
+| `thor/curate.py` | Licence allowlist, personal-data scrubbing, deduplication, quality and toxicity filters |
+| `thor/pii.py` | Personal-data detection; fictitious surrogates for training, tags for replies |
+| `thor/convert.py` | Converters for public instruction datasets (oasst, dolly, alpaca, sharegpt, hh, messages) |
+| `thor/safety.py` | Runtime safety layer: request/reply screening and redaction |
+| `thor/safety_eval.py` | Held-out red-team evaluation |
+| `safety/` | THOR-written safety seed conversations and red-team evaluation prompts |
 | `thor/specs.py` | Prints the preset specification table and compute estimates |
 | `notebooks/train_thor_30m_colab.ipynb` | End-to-end THOR-30M training on a free Colab GPU |
 
@@ -64,7 +70,16 @@ pip install -e ".[dev]"   # CPU or CUDA build of PyTorch, whichever your machine
 pytest -q
 ```
 
-### 2. Prepare data
+### 2. Curate raw text (licences, personal data, duplicates)
+
+Declare every source and its licence in a manifest, then curate. See [`DATA.md`](DATA.md) for which datasets are acceptable.
+
+```bash
+python -m thor.curate --manifest sources.json --out ../data/curated
+# writes curated.txt (feed it to thor.prepare with --doc-sep "<|endoftext|>") and report.json
+```
+
+### 3. Prepare data
 
 Input is plain UTF-8 text. Each file is one document, or use `--doc-sep` to split files into documents.
 
@@ -77,7 +92,7 @@ This trains a tokenizer on the training split only and writes `tokenizer.json`, 
 
 **Before using any dataset, record its source and license in [`DATA.md`](DATA.md).**
 
-### 3. Train
+### 4. Train
 
 ```bash
 python -m thor.train --config configs/thor-30m-tinystories.json
@@ -92,7 +107,7 @@ python -m thor.train --config configs/thor-30m-tinystories.json
 - Training refuses to resume if the model shape or tokenizer changed. `--resume never` refuses to touch an existing run at all.
 - The configs in `configs/` are untuned starting points.
 
-### 4. Evaluate and sample
+### 5. Evaluate and sample
 
 ```bash
 python -m thor.evaluate --ckpt ../runs/thor-30m-tinystories/model_best.pt --data-dir ../data/tinystories
@@ -102,13 +117,15 @@ python -m thor.sample   --ckpt ../runs/thor-30m-tinystories/model_best.pt \
 
 Bits per byte can be compared across tokenizers; loss and perplexity can only be compared between models that share a tokenizer.
 
-### 5. Instruction tuning and chat
+### 6. Instruction tuning and chat
 
 A base model only continues text. To make it chat, fine-tune it on conversations ([decision record](../docs/decisions/0004-chat-format-and-instruction-tuning.md)):
 
 ```bash
 # conversations.jsonl: one {"messages": [{"role": "user", "content": "…"}, {"role": "assistant", "content": "…"}]} per line
-python -m thor.sft_data --input conversations.jsonl --tokenizer ../data/tinystories/tokenizer.json --out ../data/chat-sft
+python -m thor.convert --format oasst --input oasst1-trees.jsonl --out oasst.jsonl      # public dataset → messages
+cat oasst.jsonl safety/safety_seed.jsonl > conversations.jsonl                          # add THOR's safety data
+python -m thor.sft_data --input conversations.jsonl --tokenizer ../data/tinystories/tokenizer.json --out ../data/chat-sft --license Apache-2.0
 python -m thor.train --init-from ../runs/thor-30m-tinystories/model_best.pt --data-dir ../data/chat-sft \
   --out-dir ../runs/thor-30m-chat --lr 1e-4 --min-lr 1e-5 --max-steps 2000 --warmup-steps 100
 python -m thor.chat --ckpt ../runs/thor-30m-chat/model_best.pt --tokenizer ../data/chat-sft/tokenizer.json
@@ -119,9 +136,16 @@ python -m thor.chat --ckpt ../runs/thor-30m-chat/model_best.pt --tokenizer ../da
 - `thor.chat` keeps the conversation history (`/reset` clears it) and warns if the checkpoint is a base model.
 - The learning rates above are untuned starting points. **Choose and register a conversation dataset in [`DATA.md`](DATA.md) first.**
 
+### 7. Privacy and safety
+
+- `thor.sft_data` requires `--license` and replaces personal data in every message with fictitious values (`--no-scrub-pii` to disable).
+- `thor.chat` screens requests and replies and redacts personal data from replies (`--no-safety` for research only).
+- Measure: `python -m thor.safety_eval --guard-only`, or with `--ckpt … --tokenizer … --show` for a model. Details: [decision record 0005](../docs/decisions/0005-data-governance-and-safety.md).
+
 ## Known limitations
 
 - The tokenizer is pure Python. It is fine for corpora up to a few GB with `--workers`, but slow at multi-billion-token scale. A compiled encoder is a planned follow-up.
 - No KV cache yet, so generation recomputes the full context each token. That is acceptable for these model sizes.
 - Single-GPU training only (no distributed data parallel yet).
+- Personal-data detection and safety screening are pattern-based: best effort, with blind spots. No learned toxicity or safety classifier is bundled.
 - Instruction tuning is single-turn-loss SFT only (no preference tuning yet). Chat quality depends entirely on the trained base model and the conversation data.

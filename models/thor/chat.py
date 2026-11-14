@@ -5,6 +5,10 @@
 Commands: /reset clears the conversation, /exit quits. Older turns are dropped
 when the conversation no longer fits the model's context window.
 
+The safety layer (thor/safety.py) is on by default: it screens requests and
+replies and redacts personal data from replies. --no-safety turns it off for
+research use only.
+
 Only an instruction-tuned checkpoint (trained with thor.sft_data + thor.train
 --init-from) is trained to reply. A base model will just continue the text.
 """
@@ -18,6 +22,7 @@ import torch
 
 from .chat_format import END, Message, render, require_chat
 from .model import ThorModel
+from .safety import SafetyGuard
 from .tokenizer import Tokenizer
 from .train import load_model
 
@@ -25,7 +30,7 @@ from .train import load_model
 class ChatSession:
     def __init__(self, model: ThorModel, tok: Tokenizer, system: str | None = None,
                  max_new_tokens: int = 256, temperature: float = 0.7, top_k: int | None = 50,
-                 seed: int = 0, device: str = "cpu") -> None:
+                 seed: int = 0, device: str = "cpu", guard: SafetyGuard | None = None) -> None:
         require_chat(tok)
         self.model, self.tok = model, tok
         self.system = system
@@ -34,6 +39,8 @@ class ChatSession:
         self.device = device
         self.generator = torch.Generator(device=device).manual_seed(seed)
         self.history: list[Message] = []
+        self.guard = guard
+        self.last_safety: dict = {}  # what the safety layer did on the last turn
 
     def reset(self) -> None:
         self.history = []
@@ -51,6 +58,13 @@ class ChatSession:
 
     def reply(self, user_text: str) -> str:
         self.history.append({"role": "user", "content": user_text})
+        self.last_safety = {}
+        if self.guard is not None:
+            verdict = self.guard.check_request(user_text)
+            if not verdict.allowed:
+                self.last_safety = {"request_blocked": verdict.category}
+                self.history.append({"role": "assistant", "content": verdict.response or ""})
+                return verdict.response or ""
         prompt = self._prompt_ids()
         idx = torch.tensor([prompt], dtype=torch.long, device=self.device)
         stop = [self.tok.special_tokens[END], self.tok.eot_id]
@@ -58,6 +72,8 @@ class ChatSession:
                                   eos_id=stop, generator=self.generator)[0, len(prompt):].tolist()
         out = [t for t in out if t not in stop and t not in self.tok.special_ids]
         text = self.tok.decode(out).strip()
+        if self.guard is not None:
+            text, self.last_safety = self.guard.filter_reply(text)
         self.history.append({"role": "assistant", "content": text})
         return text
 
@@ -72,6 +88,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--top-k", type=int, default=50)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--no-safety", action="store_true", help="Disable the safety layer (research only)")
     args = ap.parse_args(argv)
 
     tok = Tokenizer.load(args.tokenizer)
@@ -80,13 +97,15 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit("This tokenizer is not the one the checkpoint was trained with")
     try:
         session = ChatSession(model, tok, args.system, args.max_new_tokens, args.temperature,
-                              args.top_k, args.seed, args.device)
+                              args.top_k, args.seed, args.device, guard=None if args.no_safety else SafetyGuard())
     except ValueError as e:
         raise SystemExit(str(e)) from None
 
     print(f"THOR chat · {model.cfg.name} · {model.num_params() / 1e6:.1f}M parameters · step {ckpt.get('step')}")
     if ckpt.get("stage") != "sft":
         print("Note: this is a base model, not instruction-tuned. It will continue text rather than reply.")
+    if args.no_safety:
+        print("Warning: the safety layer is OFF. Replies are not screened or redacted.")
     print("Type /reset to start over, /exit to quit.\n")
     while True:
         try:

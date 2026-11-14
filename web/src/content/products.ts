@@ -55,10 +55,12 @@ export interface PipelineStage {
 
 /** What exists in code today. Every "working" stage has tests in models/tests. */
 export const pipeline: PipelineStage[] = [
+  { name: "Data curation", status: "working", detail: "Licence allowlist, personal-data removal, deduplication and quality filters." },
   { name: "Tokenizer", status: "working", detail: "Byte-level BPE trained in-house. Every string round-trips exactly." },
   { name: "Architecture", status: "working", detail: "Decoder-only Transformer with RoPE, SwiGLU and RMSNorm, in three sizes." },
   { name: "Training", status: "working", detail: "Atomic checkpoints and bit-exact resume after any interruption." },
   { name: "Evaluation", status: "working", detail: "Deterministic held-out loss, perplexity and bits per byte." },
   { name: "Instruction tuning", status: "working", detail: "Chat format and fine-tuning that learns only from assistant replies." },
+  { name: "Safety layer", status: "working", detail: "Safety training data, request screening and personal-data redaction in replies." },
   { name: "Inference service", status: "planned", detail: "An independent serving layer for THOR Chat and the API." },
 ];

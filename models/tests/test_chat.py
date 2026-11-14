@@ -92,7 +92,7 @@ def workspace(tmp_path_factory):
     lines.append(json.dumps({"messages": [{"role": "user", "content": "no reply"}]}))
     (root / "chats.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     sft_prepare(["--input", str(root / "chats.jsonl"), "--tokenizer", str(root / "pre" / "tokenizer.json"),
-                 "--out", str(root / "sft"), "--max-len", "64", "--val-fraction", "0.1"])
+                 "--out", str(root / "sft"), "--max-len", "64", "--val-fraction", "0.1", "--license", "THOR-owned"])
     return root
 
 
