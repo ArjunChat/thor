@@ -13,7 +13,9 @@ THOR's language-model stack, written from scratch in PyTorch:
 | `thor/sample.py` | Text generation from a checkpoint |
 | `thor/chat_format.py` | Chat format: role tokens and the assistant-only loss mask |
 | `thor/sft_data.py` | Conversations (JSONL) → instruction-tuning data |
-| `thor/chat.py` | Terminal chat with a checkpoint (safety layer on by default) |
+| `thor/chat.py` | Terminal chat with a THOR checkpoint or an external test engine (safety layer on by default) |
+| `thor/serve.py`, `thor/static/chat.html` | THOR Chat in the browser, for local testing |
+| `thor/providers.py` | Chat engines: THOR checkpoints, and labelled external APIs (Gemini, Groq, OpenRouter) |
 | `thor/curate.py` | Licence allowlist, personal-data scrubbing, deduplication, quality and toxicity filters |
 | `thor/pii.py` | Personal-data detection; fictitious surrogates for training, tags for replies |
 | `thor/convert.py` | Converters for public instruction datasets (oasst, dolly, alpaca, sharegpt, hh, messages) |
@@ -62,6 +64,25 @@ Open [`notebooks/train_thor_30m_colab.ipynb`](notebooks/train_thor_30m_colab.ipy
 4. plots loss, evaluates the best checkpoint, and generates samples.
 
 CI runs the whole notebook on CPU with a tiny model (`THOR_SMOKE_TEST=1`), so it stays in sync with the code. The real T4 run has not been tested yet.
+
+### Try THOR Chat now (external test engine)
+
+No THOR chat model is trained yet. To test the chat product meanwhile, use a free external model. **Its replies are labelled "External · not THOR".** Personal data is stripped from your messages before they're sent, and the safety layer applies. ([Why and how](../docs/decisions/0006-external-test-engines.md).)
+
+1. Get a free Gemini API key at https://aistudio.google.com/apikey (Google account, 18+; free tier not for apps serving UK/EU/Swiss users).
+2. Run:
+
+```bash
+cd models
+pip install -e .
+export GEMINI_API_KEY="your-key"          # Windows PowerShell: $env:GEMINI_API_KEY="your-key"
+python -m thor.serve --provider gemini    # then open http://127.0.0.1:8800
+```
+
+Other options: `python -m thor.chat --provider gemini` (terminal), `--provider gemini:<model>` to pick a model, and `python -m thor.providers --provider gemini` to list available models. Groq (`GROQ_API_KEY`) and OpenRouter (`OPENROUTER_API_KEY`) work the same way. On Gemini's free tier, Google may store and review what you send: don't share sensitive information.
+
+When a THOR chat model is trained, add it next to the external engine to compare them:
+`python -m thor.serve --thor-ckpt … --thor-tokenizer … --provider gemini`.
 
 ### 1. Install
 

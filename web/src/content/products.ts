@@ -27,9 +27,9 @@ export const products: Product[] = [
   {
     slug: "chat",
     name: "THOR Chat",
-    status: "planned",
+    status: "in-development",
     summary: "A public conversational AI application.",
-    detail: "Will run on THOR's own instruction-tuned models once they are trained. Any external model used in the meantime would be clearly labelled as such.",
+    detail: "A chat app for internal testing is built, with the safety layer. Until a THOR model is trained, testing uses an external model that is labelled as not THOR on every reply.",
   },
   {
     slug: "studio",

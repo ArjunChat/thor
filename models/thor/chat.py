@@ -1,6 +1,7 @@
-"""Chat with a THOR checkpoint in the terminal.
+"""Chat in the terminal with a THOR checkpoint, or with an external model for testing.
 
     python -m thor.chat --ckpt runs/thor-30m-chat/model_best.pt --tokenizer data/chat-sft/tokenizer.json
+    GEMINI_API_KEY=... python -m thor.chat --provider gemini      # external model, labelled as such
 
 Commands: /reset clears the conversation, /exit quits. Older turns are dropped
 when the conversation no longer fits the model's context window.
@@ -18,43 +19,55 @@ from __future__ import annotations
 import argparse
 import sys
 
-import torch
-
-from .chat_format import END, Message, render, require_chat
+from . import pii
+from .chat_format import Message
 from .model import ThorModel
+from .providers import PROVIDERS, BackendError, ExternalBackend, ThorBackend
 from .safety import SafetyGuard
 from .tokenizer import Tokenizer
 from .train import load_model
 
 
 class ChatSession:
-    def __init__(self, model: ThorModel, tok: Tokenizer, system: str | None = None,
+    """A conversation with any backend, behind the safety layer.
+
+    Pass a THOR model and tokenizer (the usual case), or any backend from
+    thor.providers. With an external backend, personal data in the conversation
+    is replaced with tags before it is sent off the machine.
+    """
+
+    def __init__(self, model: ThorModel | None = None, tok: Tokenizer | None = None, system: str | None = None,
                  max_new_tokens: int = 256, temperature: float = 0.7, top_k: int | None = 50,
-                 seed: int = 0, device: str = "cpu", guard: SafetyGuard | None = None) -> None:
-        require_chat(tok)
-        self.model, self.tok = model, tok
+                 seed: int = 0, device: str = "cpu", guard: SafetyGuard | None = None,
+                 backend: ThorBackend | ExternalBackend | None = None, scrub_outbound: bool = True) -> None:
+        if backend is None:
+            if model is None or tok is None:
+                raise ValueError("Pass a model and tokenizer, or a backend")
+            backend = ThorBackend(model, tok, max_new_tokens, temperature, top_k, seed, device)
+        self.backend = backend
         self.system = system
-        self.max_new_tokens = max_new_tokens
-        self.temperature, self.top_k = temperature, top_k
-        self.device = device
-        self.generator = torch.Generator(device=device).manual_seed(seed)
         self.history: list[Message] = []
         self.guard = guard
+        self.scrub_outbound = scrub_outbound
         self.last_safety: dict = {}  # what the safety layer did on the last turn
 
     def reset(self) -> None:
         self.history = []
 
-    def _prompt_ids(self) -> list[int]:
-        """Render the conversation, dropping the oldest turns until it fits with room to reply."""
-        budget = self.model.cfg.max_seq_len - min(self.max_new_tokens, self.model.cfg.max_seq_len // 2)
-        turns = list(self.history)
-        while True:
-            messages: list[Message] = ([{"role": "system", "content": self.system}] if self.system else []) + turns
-            ids, _ = render(self.tok, messages, add_generation_prompt=True)
-            if len(ids) <= budget or len(turns) <= 1:
-                return ids[-budget:]
-            turns = turns[2:] if len(turns) > 2 else turns[1:]  # drop the oldest user/assistant pair
+    def _outbound(self) -> list[Message]:
+        messages: list[Message] = ([{"role": "system", "content": self.system}] if self.system else []) + self.history
+        if self.backend.is_thor or not self.scrub_outbound:
+            return messages
+        withheld: dict[str, int] = {}
+        safe: list[Message] = []
+        for m in messages:
+            content, found = pii.scrub(m["content"], mode="tag")
+            for k, v in found.items():
+                withheld[k] = withheld.get(k, 0) + v
+            safe.append({"role": m["role"], "content": content})
+        if withheld:
+            self.last_safety["pii_withheld"] = withheld
+        return safe
 
     def reply(self, user_text: str) -> str:
         self.history.append({"role": "user", "content": user_text})
@@ -65,23 +78,25 @@ class ChatSession:
                 self.last_safety = {"request_blocked": verdict.category}
                 self.history.append({"role": "assistant", "content": verdict.response or ""})
                 return verdict.response or ""
-        prompt = self._prompt_ids()
-        idx = torch.tensor([prompt], dtype=torch.long, device=self.device)
-        stop = [self.tok.special_tokens[END], self.tok.eot_id]
-        out = self.model.generate(idx, self.max_new_tokens, self.temperature, self.top_k,
-                                  eos_id=stop, generator=self.generator)[0, len(prompt):].tolist()
-        out = [t for t in out if t not in stop and t not in self.tok.special_ids]
-        text = self.tok.decode(out).strip()
+        try:
+            text = self.backend.complete(self._outbound())
+        except BackendError:
+            self.history.pop()  # keep history consistent: the turn didn't happen
+            raise
         if self.guard is not None:
-            text, self.last_safety = self.guard.filter_reply(text)
+            text, changes = self.guard.filter_reply(text)
+            self.last_safety.update(changes)
         self.history.append({"role": "assistant", "content": text})
         return text
 
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--tokenizer", required=True)
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--ckpt", help="A THOR checkpoint")
+    src.add_argument("--provider", choices=sorted(PROVIDERS), help="An external model API (not a THOR model)")
+    ap.add_argument("--tokenizer", help="Tokenizer for --ckpt")
+    ap.add_argument("--model", default=None, help="Model name for --provider")
     ap.add_argument("--system", default=None, help="Optional system message")
     ap.add_argument("--max-new-tokens", type=int, default=256)
     ap.add_argument("--temperature", type=float, default=0.7)
@@ -91,19 +106,31 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--no-safety", action="store_true", help="Disable the safety layer (research only)")
     args = ap.parse_args(argv)
 
-    tok = Tokenizer.load(args.tokenizer)
-    model, ckpt = load_model(args.ckpt, args.device)
-    if ckpt["tokenizer_sha256"] != tok.fingerprint():
-        raise SystemExit("This tokenizer is not the one the checkpoint was trained with")
-    try:
-        session = ChatSession(model, tok, args.system, args.max_new_tokens, args.temperature,
-                              args.top_k, args.seed, args.device, guard=None if args.no_safety else SafetyGuard())
-    except ValueError as e:
-        raise SystemExit(str(e)) from None
-
-    print(f"THOR chat · {model.cfg.name} · {model.num_params() / 1e6:.1f}M parameters · step {ckpt.get('step')}")
-    if ckpt.get("stage") != "sft":
-        print("Note: this is a base model, not instruction-tuned. It will continue text rather than reply.")
+    guard = None if args.no_safety else SafetyGuard()
+    if args.ckpt:
+        if not args.tokenizer:
+            raise SystemExit("--ckpt needs --tokenizer")
+        tok = Tokenizer.load(args.tokenizer)
+        model, ckpt = load_model(args.ckpt, args.device)
+        if ckpt["tokenizer_sha256"] != tok.fingerprint():
+            raise SystemExit("This tokenizer is not the one the checkpoint was trained with")
+        try:
+            backend = ThorBackend(model, tok, args.max_new_tokens, args.temperature, args.top_k, args.seed,
+                                  args.device, stage=ckpt.get("stage"))
+        except ValueError as e:
+            raise SystemExit(str(e)) from None
+        prompt = "thor ›"
+        print(f"THOR chat · {model.cfg.name} · {model.num_params() / 1e6:.1f}M parameters · step {ckpt.get('step')}")
+        if ckpt.get("stage") != "sft":
+            print("Note: this is a base model, not instruction-tuned. It will continue text rather than reply.")
+    else:
+        backend = ExternalBackend(args.provider, args.model, temperature=args.temperature,
+                                  max_tokens=args.max_new_tokens)
+        prompt = f"{backend.model} (external) ›"
+        print(f"THOR chat · {backend.label}")
+        print("Replies come from a third-party model, NOT a THOR model. Personal data in your messages is")
+        print(f"replaced before sending, but {backend.provider.name}'s terms apply to everything you send.")
+    session = ChatSession(guard=guard, backend=backend)
     if args.no_safety:
         print("Warning: the safety layer is OFF. Replies are not screened or redacted.")
     print("Type /reset to start over, /exit to quit.\n")
@@ -121,7 +148,10 @@ def main(argv: list[str] | None = None) -> None:
             session.reset()
             print("(conversation cleared)\n")
             continue
-        print(f"thor › {session.reply(user)}\n", flush=True)
+        try:
+            print(f"{prompt} {session.reply(user)}\n", flush=True)
+        except BackendError as e:
+            print(f"(error) {e}\n", flush=True)
     sys.exit(0)
 
 

@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THOR Chat</title>
+<style>
+  :root {
+    --black: #0a0a0b; --g900: #141518; --g800: #1c1d21; --g700: #24262b; --g600: #2e3036;
+    --steel: #7c808a; --silver: #a9adb6; --white: #f5f6f7; --signal: #3d7bff; --warn: #e0b341;
+    --sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--black); color: var(--white); font: 15px/1.6 var(--sans); -webkit-font-smoothing: antialiased;
+         display: flex; flex-direction: column; }
+  header { border-bottom: 1px solid var(--g600); padding: 12px 16px; display: flex; gap: 12px; align-items: center;
+           flex-wrap: wrap; }
+  header .brand { display: flex; align-items: center; gap: 10px; margin-right: auto; }
+  header .brand span { font: 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--steel); }
+  select, button { font: inherit; color: var(--white); background: var(--g900); border: 1px solid var(--g600);
+                   border-radius: 8px; padding: 8px 12px; }
+  select { max-width: 100%; min-width: 0; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--steel); }
+  button.primary { background: var(--white); color: var(--black); border-color: var(--white); font-weight: 600; }
+  button.primary:hover { background: var(--silver); }
+  button:disabled { opacity: .5; cursor: default; }
+  :focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  #notice { padding: 10px 16px; font-size: 13px; border-bottom: 1px solid var(--g600); background: var(--g900);
+            color: var(--silver); }
+  #notice b { color: var(--white); font-weight: 600; }
+  #notice.external { border-left: 3px solid var(--warn); }
+  #notice.thor { border-left: 3px solid var(--signal); }
+  main { flex: 1; overflow-y: auto; }
+  #log { max-width: 760px; margin: 0 auto; padding: 24px 16px 8px; display: flex; flex-direction: column; gap: 18px; }
+  .empty { color: var(--steel); text-align: center; margin-top: 12vh; }
+  .empty h1 { color: var(--white); font-size: 28px; letter-spacing: -.03em; margin: 0 0 8px; }
+  .msg { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .user { align-self: flex-end; background: var(--g800); border: 1px solid var(--g600); padding: 10px 14px;
+          border-radius: 14px 14px 4px 14px; max-width: 85%; }
+  .bot { align-self: flex-start; max-width: 100%; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .chip { font: 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; border-radius: 999px;
+          padding: 5px 9px; border: 1px solid var(--g600); color: var(--silver); display: inline-flex; gap: 6px;
+          align-items: center; }
+  .chip i { width: 6px; height: 6px; border-radius: 2px; display: inline-block; }
+  .chip.thor { border-color: rgba(61,123,255,.5); color: var(--white); } .chip.thor i { background: var(--signal); }
+  .chip.ext { border-color: rgba(224,179,65,.5); color: var(--white); } .chip.ext i { background: var(--warn); }
+  .chip.safety { color: var(--silver); }
+  .model { font: 12px var(--mono); color: var(--steel); }
+  .error { color: #ff8a80; font-size: 14px; }
+  .pending { color: var(--steel); font-style: italic; }
+  footer { border-top: 1px solid var(--g600); padding: 12px 16px 16px; }
+  form { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  textarea { flex: 1; min-width: 0; resize: none; font: inherit; color: var(--white); background: var(--g900);
+             border: 1px solid var(--g600); border-radius: 12px; padding: 10px 14px; max-height: 40vh; }
+  .hint { max-width: 760px; margin: 8px auto 0; font-size: 12px; color: var(--steel); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 400 100" height="14" aria-label="THOR" role="img"><path fill-rule="evenodd" fill="#f5f6f7" d="M0 0H84V16H50V100H34V16H0Z M102 0H118V42H166V0H182V100H166V58H118V100H102Z M236 0H260A32 32 0 0 1 292 32V68A32 32 0 0 1 260 100H236A32 32 0 0 1 204 68V32A32 32 0 0 1 236 0ZM236 16A16 16 0 0 0 220 32V68A16 16 0 0 0 236 84H260A16 16 0 0 0 276 68V32A16 16 0 0 0 260 16Z M314 0H365A29 29 0 0 1 365 58H330V100H314ZM330 16V42H365A13 13 0 0 0 365 16Z"/><path fill="#f5f6f7" d="M338.6 42H358.6L400 100H380Z"/><path fill="#3d7bff" d="M240 42H256V58H240Z"/></svg>
+    <span>Chat · testing</span>
+  </div>
+  <label for="engine" style="position:absolute;left:-9999px">Engine</label>
+  <select id="engine"></select>
+  <button id="reset" type="button">New chat</button>
+</header>
+<div id="notice" role="status"></div>
+<main><div id="log" aria-live="polite"></div></main>
+<footer>
+  <form id="form">
+    <label for="input" style="position:absolute;left:-9999px">Message</label>
+    <textarea id="input" rows="1" placeholder="Message" autocomplete="off"></textarea>
+    <button class="primary" id="send" type="submit">Send</button>
+  </form>
+  <p class="hint">Enter to send · Shift+Enter for a new line · Don't share personal or sensitive information.</p>
+</footer>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let engines = [], safetyOn = true, history = [], busy = false;
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;  // always text, never HTML
+  return n;
+}
+function current() { return engines.find((e) => e.id === $("engine").value); }
+
+function renderNotice() {
+  const e = current(), n = $("notice");
+  n.textContent = "";
+  if (!e) return;
+  n.className = e.is_thor ? "thor" : "external";
+  const b = el("b", null, e.is_thor ? "THOR model. " : "External model, not THOR. ");
+  n.append(b, e.is_thor
+    ? "Replies come from a THOR model running on this machine. Small research models make many mistakes."
+    : "Replies come from a third-party API for testing THOR Chat. Personal data in your messages is replaced before " +
+      "sending, but the provider's terms apply, and on free tiers your messages may be stored and reviewed.");
+  if (!safetyOn) n.append(el("b", null, " Safety layer is OFF."));
+}
+
+function renderEmpty() {
+  const log = $("log");
+  log.textContent = "";
+  const box = el("div", "empty");
+  box.append(el("h1", null, "Intelligence, engineered."), el("div", null, "Start a conversation to test THOR Chat."));
+  log.append(box);
+}
+
+function addUser(text) {
+  if (!history.length) $("log").textContent = "";
+  $("log").append(el("div", "msg user", text));
+}
+
+function safetyText(s) {
+  if (!s) return [];
+  const out = [];
+  if (s.request_blocked) out.push("Safety layer answered (" + s.request_blocked.replace("_", " ") + ")");
+  if (s.blocked) out.push("Reply replaced by safety layer (" + s.blocked.replace("_", " ") + ")");
+  if (s.pii_withheld) out.push("Personal data withheld from provider: " + Object.entries(s.pii_withheld).map(([k, v]) => v + " " + k).join(", "));
+  if (s.pii_redacted) out.push("Personal data removed from reply: " + Object.entries(s.pii_redacted).map(([k, v]) => v + " " + k).join(", "));
+  return out;
+}
+
+function addBot(text, engine, safety) {
+  const wrap = el("div", "bot");
+  const meta = el("div", "meta");
+  const bySafety = Boolean(safety && safety.request_blocked);  // the model never saw this request
+  const chip = el("span", "chip " + (engine.is_thor || bySafety ? "thor" : "ext"));
+  chip.append(el("i"), bySafety ? "THOR safety layer" : engine.is_thor ? "THOR model" : "External · not THOR");
+  meta.append(chip, el("span", "model", bySafety ? "answered without contacting the model" : engine.label));
+  for (const t of safetyText(safety)) meta.append(el("span", "chip safety", t));
+  wrap.append(meta, el("div", "msg", text));
+  $("log").append(wrap);
+}
+
+function scroll() { const m = document.querySelector("main"); m.scrollTop = m.scrollHeight; }
+
+async function send(text) {
+  const engine = current();
+  if (!engine || !engine.available || busy) return;
+  busy = true; $("send").disabled = true;
+  addUser(text);
+  history.push({ role: "user", content: text });
+  const pending = el("div", "pending", "Thinking…");
+  $("log").append(pending); scroll();
+  try {
+    const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+                                         body: JSON.stringify({ backend: engine.id, messages: history }) });
+    const data = await r.json();
+    pending.remove();
+    if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+    history.push({ role: "assistant", content: data.reply });
+    addBot(data.reply, data.engine, data.safety);
+  } catch (err) {
+    pending.remove();
+    history.pop();  // the turn failed; let the user retry
+    $("log").append(el("div", "error", "Error: " + err.message));
+  } finally {
+    busy = false; $("send").disabled = false; scroll(); $("input").focus();
+  }
+}
+
+function newChat() { history = []; renderEmpty(); }
+
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim();
+  if (!text) return;
+  $("input").value = ""; $("input").style.height = "";
+  send(text);
+});
+$("input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
+});
+$("input").addEventListener("input", (e) => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; });
+$("reset").addEventListener("click", newChat);
+$("engine").addEventListener("change", () => { newChat(); renderNotice(); });
+
+(async () => {
+  const data = await (await fetch("/api/engines")).json();
+  engines = data.engines; safetyOn = data.safety;
+  for (const e of engines) {
+    const o = el("option", null, (e.is_thor ? "THOR · " : "External · ") + e.label);
+    o.value = e.id; o.disabled = !e.available;
+    $("engine").append(o);
+  }
+  const first = engines.find((e) => e.available);
+  if (first) $("engine").value = first.id;
+  renderNotice(); renderEmpty(); $("input").focus();
+})();
+</script>
+</body>
+</html>
